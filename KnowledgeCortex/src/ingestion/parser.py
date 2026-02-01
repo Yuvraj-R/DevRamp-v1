@@ -18,6 +18,7 @@ class FunctionInfo:
     docstring: str | None = None
     is_method: bool = False
     class_name: str | None = None  # If it's a method, which class
+    body: str | None = None  # Full function code
 
 
 @dataclass
@@ -29,6 +30,7 @@ class ClassInfo:
     bases: list[str] = field(default_factory=list)  # Parent classes
     methods: list[str] = field(default_factory=list)  # Method names
     docstring: str | None = None
+    body: str | None = None  # Full class code
 
 
 @dataclass
@@ -207,12 +209,16 @@ class CodeParser:
                                 break
                     break  # Only check first statement
 
+        # Extract full function body
+        body = self._get_node_text(node, source)
+
         return FunctionInfo(
             name=name,
             line_start=node.start_point[0] + 1,
             line_end=node.end_point[0] + 1,
             parameters=params,
             docstring=docstring,
+            body=body,
         )
 
     def _parse_python_class(self, node, source: str) -> ClassInfo:
@@ -238,12 +244,16 @@ class CodeParser:
                                 break
                     break
 
+        # Extract full class body
+        body = self._get_node_text(node, source)
+
         return ClassInfo(
             name=name,
             line_start=node.start_point[0] + 1,
             line_end=node.end_point[0] + 1,
             bases=bases,
             docstring=docstring,
+            body=body,
         )
 
     def _parse_python_import(self, node, source: str) -> ImportInfo | None:
@@ -366,6 +376,8 @@ class CodeParser:
                                 params.append(self._get_node_text(pc, source))
                                 break
 
+        body = self._get_node_text(node, source)
+
         return FunctionInfo(
             name=name,
             line_start=node.start_point[0] + 1,
@@ -373,6 +385,7 @@ class CodeParser:
             parameters=params,
             is_method=class_context is not None,
             class_name=class_context,
+            body=body,
         )
 
     def _parse_js_arrow_function(self, node, source: str, name: str) -> FunctionInfo:
@@ -388,11 +401,14 @@ class CodeParser:
                 # Single param without parens
                 params.append(self._get_node_text(child, source))
 
+        body = self._get_node_text(node, source)
+
         return FunctionInfo(
             name=name,
             line_start=node.start_point[0] + 1,
             line_end=node.end_point[0] + 1,
             parameters=params,
+            body=body,
         )
 
     def _parse_js_method(self, node, source: str, class_context: str) -> FunctionInfo:
@@ -408,6 +424,8 @@ class CodeParser:
                     if param.type == "identifier":
                         params.append(self._get_node_text(param, source))
 
+        body = self._get_node_text(node, source)
+
         return FunctionInfo(
             name=name,
             line_start=node.start_point[0] + 1,
@@ -415,6 +433,7 @@ class CodeParser:
             parameters=params,
             is_method=True,
             class_name=class_context,
+            body=body,
         )
 
     def _parse_js_class(self, node, source: str) -> ClassInfo:
@@ -431,11 +450,14 @@ class CodeParser:
                     if hc.type == "identifier":
                         bases.append(self._get_node_text(hc, source))
 
+        body = self._get_node_text(node, source)
+
         return ClassInfo(
             name=name,
             line_start=node.start_point[0] + 1,
             line_end=node.end_point[0] + 1,
             bases=bases,
+            body=body,
         )
 
     def _parse_js_import(self, node, source: str) -> ImportInfo | None:

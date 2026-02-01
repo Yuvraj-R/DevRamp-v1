@@ -198,6 +198,12 @@ class GraphBuilder:
         module_id: str | None
     ):
         """Create a File node and link to Module or Repository."""
+        # Read file content
+        try:
+            content = file_path.read_text(errors="replace")
+        except Exception:
+            content = None
+
         query = """
         MERGE (f:File {id: $id})
         SET f.name = $name,
@@ -206,7 +212,8 @@ class GraphBuilder:
             f.language = $language,
             f.lines_of_code = $lines_of_code,
             f.function_count = $function_count,
-            f.class_count = $class_count
+            f.class_count = $class_count,
+            f.content = $content
         """
         self.client.run_write(query, {
             "id": file_id,
@@ -217,6 +224,7 @@ class GraphBuilder:
             "lines_of_code": parsed.lines_of_code,
             "function_count": len(parsed.functions),
             "class_count": len(parsed.classes),
+            "content": content,
         })
 
         # Link to parent (Module or Repository)
@@ -243,7 +251,8 @@ class GraphBuilder:
             fn.parameters = $parameters,
             fn.is_method = $is_method,
             fn.class_name = $class_name,
-            fn.docstring = $docstring
+            fn.docstring = $docstring,
+            fn.body = $body
         WITH fn
         MATCH (f:File {id: $file_id})
         MERGE (f)-[:CONTAINS]->(fn)
@@ -258,6 +267,7 @@ class GraphBuilder:
             "is_method": func.is_method,
             "class_name": func.class_name,
             "docstring": func.docstring,
+            "body": func.body,
             "file_id": file_id,
         })
 
@@ -269,7 +279,8 @@ class GraphBuilder:
             c.line_start = $line_start,
             c.line_end = $line_end,
             c.bases = $bases,
-            c.docstring = $docstring
+            c.docstring = $docstring,
+            c.body = $body
         WITH c
         MATCH (f:File {id: $file_id})
         MERGE (f)-[:CONTAINS]->(c)
@@ -282,6 +293,7 @@ class GraphBuilder:
             "line_end": cls.line_end,
             "bases": cls.bases,
             "docstring": cls.docstring,
+            "body": cls.body,
             "file_id": file_id,
         })
 

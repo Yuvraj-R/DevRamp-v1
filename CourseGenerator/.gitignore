@@ -4,8 +4,8 @@ __pycache__/
 *$py.class
 *.so
 .Python
-.venv/
 venv/
+.venv/
 ENV/
 env/
 
@@ -23,14 +23,8 @@ env/
 .coverage
 htmlcov/
 
-# Cloned repos (don't commit test repos)
-repos/
-
-# LanceDB data (vector embeddings)
-lancedb_data/
-
-# Scripts output
-scripts/*.json
+# Generated data (SQLite database with courses)
+data/
 
 # OS
 .DS_Store

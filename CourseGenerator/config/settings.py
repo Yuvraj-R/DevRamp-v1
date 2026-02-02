@@ -19,8 +19,10 @@ class Settings(BaseSettings):
     database_path: Path = Path(__file__).parent.parent / "data" / "courses.db"
 
     # Course generation settings
-    max_modules: int = 10
-    max_sections_per_module: int = 8
+    # These are UPPER BOUNDS - actual counts adapt to codebase size
+    max_modules: int = 5  # Absolute max, most courses will have 3-4
+    max_sections_per_module: int = 3  # Keep it tight
+    max_exercises_per_module: int = 2
     target_active_ratio: float = 0.30  # 30% exercises/quizzes
 
     class Config:

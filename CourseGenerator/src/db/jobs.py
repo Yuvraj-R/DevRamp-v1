@@ -121,8 +121,14 @@ class JobStore:
         )
         job["step_index"] = step_index
         job["total_steps"] = len(JOB_STEPS)
+        is_done = status == "completed"
         job["steps"] = [
-            {"status": s, "label": label, "completed": i < step_index, "current": i == step_index}
+            {
+                "status": s,
+                "label": label,
+                "completed": i < step_index or (is_done and i == step_index),
+                "current": i == step_index and not is_done,
+            }
             for i, (s, label) in enumerate(JOB_STEPS)
         ]
         return job

@@ -10,76 +10,62 @@ from src.models.course import Course, CourseModule, CompetencyLevel
 from src.client.cortex import CortexClient
 
 
-PLANNER_PROMPT = """You are a course planner for developer onboarding.
+PLANNER_PROMPT = """You're designing a quick onboarding course. Be ruthlessly concise.
 
-You need to create a course outline for a developer learning about a codebase.
-
-## Repository Information
+## The Codebase
 {repo_info}
 
-## User's Intent
-Role: {role}
-Goal: {goal}
-Focus Areas: {focus_areas}
-Depth: {depth}
-Urgency: {urgency}
+## Who's Learning
+Role: {role} | Goal: {goal} | Depth: {depth}
+Focus: {focus_areas}
 
-Key Questions to Answer:
+Key questions they need answered:
 {key_questions}
 
-## Focus Area Context
+## Relevant Code Areas
 {focus_context}
 
-## Competency Levels Available
-0. Architecture - System design, module organization, data flow (ALWAYS INCLUDE unless skip_architecture=true)
-1. Explain - Understand what code does
-2. Navigate - Find relevant code
-3. Trace - Follow execution flow
-4. Modify - Make targeted changes
-5. Extend - Add new features
-6. Debug - Diagnose and fix issues
+## Your Job
+Create a TIGHT course outline. Rules:
 
-## Instructions
-Create a course outline with {max_modules} modules maximum.
-- ALWAYS start with Architecture (level 0) unless told to skip
-- Include competency levels appropriate for the user's goal
-- Each module should have a clear learning objective
-- Order modules from foundational to advanced
+1. **{max_modules} modules MAXIMUM** - probably fewer. Small codebase = fewer modules.
+2. **Start with Architecture** (level 0) unless they just want a quick overview
+3. **No fluff** - every module must teach something essential
+4. **Be practical** - what do they actually need to know to do their job?
 
-Based on the goal:
-- onboarding: Levels 0, 1, 2 (Architecture, Explain, Navigate)
-- fix_bug: Levels 0, 1, 3, 6 (Architecture, Explain, Trace, Debug)
-- add_feature: Levels 0, 1, 2, 4, 5 (Architecture, Explain, Navigate, Modify, Extend)
-- code_review: Levels 0, 1, 3 (Architecture, Explain, Trace)
-- debugging: Levels 0, 1, 3, 6 (Architecture, Explain, Trace, Debug)
-- refactoring: Levels 0, 1, 3, 4 (Architecture, Explain, Trace, Modify)
+Competency levels (pick what fits their goal):
+- 0: Architecture (system design, how pieces connect)
+- 1: Explain (what does this code do?)
+- 2: Navigate (where do I find X?)
+- 3: Trace (follow the execution path)
+- 4: Modify (how to change things safely)
+- 5: Extend (adding new features)
+- 6: Debug (finding and fixing issues)
 
-Respond with ONLY valid JSON:
+Goal → Level mapping:
+- onboarding: 0, 1, 2 (understand the lay of the land)
+- fix_bug/debugging: 0, 3, 6 (find it, trace it, fix it)
+- add_feature: 0, 2, 4, 5 (find where, modify, extend)
+- code_review: 0, 1, 3 (understand structure and flow)
+- refactoring: 0, 3, 4 (trace dependencies, modify safely)
+
+Return JSON only:
 {{
-    "title": "Course title",
-    "description": "Brief course description",
+    "title": "Short, punchy title",
+    "description": "One sentence max",
     "modules": [
         {{
-            "title": "Module title",
-            "description": "What this module covers",
+            "title": "Module title (be specific)",
+            "description": "What they'll learn (one line)",
             "competency_level": 0-6,
-            "learning_objectives": ["objective 1", "objective 2"],
-            "key_files": ["path/to/file.py"],
-            "estimated_minutes": 15
+            "key_files": ["the 2-3 most important files"]
         }}
     ]
 }}"""
 
 
 class CoursePlanner:
-    """
-    Plans course structure based on user intent and repository.
-
-    Uses LLM to:
-    - Analyze repository structure via KnowledgeCortex
-    - Create course outline with appropriate competency levels
-    - Always include Architecture module (unless explicitly skipped)
-    """
+    """Plans course structure. Keeps it tight and practical."""
 
     def __init__(
         self,
@@ -97,81 +83,66 @@ class CoursePlanner:
         request: CourseRequest,
         parsed_intent: ParsedIntent,
     ) -> Course:
-        """
-        Create a course outline based on request and parsed intent.
-
-        Steps:
-        1. Get repository architecture overview
-        2. Get context for focus areas
-        3. Ask LLM to create course outline
-        4. Build Course object with modules
-        """
-        # 1. Get architecture overview
+        """Create a lean course outline."""
+        # Get repo info
         arch = self.cortex.get_architecture_overview(request.repo_name)
 
-        # 2. Get focus area context
+        # Get focus area context
         focus_context = []
-        for area in parsed_intent.focus_areas:
+        for area in parsed_intent.focus_areas[:3]:  # Limit to top 3
             context = self.cortex.get_focus_area_context(
-                request.repo_name,
-                area,
-                n_results=3,
+                request.repo_name, area, n_results=2
             )
             focus_context.extend(context)
 
-        # 3. Build prompt
+        # Determine max modules based on codebase size
+        file_count = arch.get('file_count', 50)
+        max_modules = self._get_max_modules(file_count, parsed_intent)
+
+        # Build prompt
         repo_info = f"""
-Repository: {request.repo_name}
-Language: {arch['language']}
-Files: {arch['file_count']}
-Summary: {arch['repo_summary'] or 'No summary available'}
+Name: {request.repo_name}
+Language: {arch.get('language', 'unknown')}
+Size: {file_count} files ({"small" if file_count < 30 else "medium" if file_count < 100 else "large"})
+Summary: {(arch.get('repo_summary') or 'No summary')[:300]}
 
-Modules:
-{self._format_modules(arch['modules'])}
-
-Key Files:
-{self._format_files(arch['key_files'])}
+Key modules: {', '.join(m.get('name', '') for m in arch.get('modules', [])[:5])}
 """
-
-        focus_context_str = self._format_focus_context(focus_context)
 
         prompt = PLANNER_PROMPT.format(
             repo_info=repo_info,
             role=parsed_intent.role.value,
             goal=parsed_intent.goal.value,
-            focus_areas=", ".join(parsed_intent.focus_areas) or "General",
             depth=parsed_intent.depth.value,
-            urgency=parsed_intent.urgency.value,
-            key_questions="\n".join(f"- {q}" for q in parsed_intent.key_questions),
-            focus_context=focus_context_str,
-            max_modules=self._get_max_modules(parsed_intent),
+            focus_areas=", ".join(parsed_intent.focus_areas) or "General overview",
+            key_questions="\n".join(f"- {q}" for q in parsed_intent.key_questions[:4]),
+            focus_context=self._format_focus_context(focus_context),
+            max_modules=max_modules,
         )
 
-        # 4. Call LLM
+        # Get plan from LLM
         response = self.openai.chat.completions.create(
             model=self.model,
             reasoning_effort=self.reasoning_level,
-            messages=[
-                {"role": "user", "content": prompt},
-            ],
+            messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
         )
 
         result = json.loads(response.choices[0].message.content)
 
-        # 5. Build Course object
+        # Build Course object
         modules = []
-        for i, m in enumerate(result["modules"]):
+        for i, m in enumerate(result["modules"][:max_modules]):
             module = CourseModule(
                 title=m["title"],
                 description=m["description"],
                 competency_level=CompetencyLevel(m["competency_level"]),
                 order=i,
-                sections=[],  # Sections will be added by ContentGenerator
+                sections=[],
             )
             modules.append(module)
 
-        course = Course(
+        return Course(
             repo_name=request.repo_name,
             title=result["title"],
             description=result["description"],
@@ -180,43 +151,27 @@ Key Files:
             modules=modules,
         )
 
-        return course
+    def _get_max_modules(self, file_count: int, intent: ParsedIntent) -> int:
+        """Fewer files = fewer modules. Simple."""
+        if file_count < 20:
+            base = 2
+        elif file_count < 50:
+            base = 3
+        elif file_count < 100:
+            base = 4
+        else:
+            base = settings.max_modules
 
-    def _format_modules(self, modules: list[dict]) -> str:
-        if not modules:
-            return "No modules detected"
-        lines = []
-        for m in modules:
-            summary = m.get("summary", "No summary")[:100]
-            lines.append(f"- {m['name']}: {summary}")
-        return "\n".join(lines)
+        # Quick overview = even fewer
+        if intent.depth.value == "overview":
+            base = min(base, 2)
 
-    def _format_files(self, files: list[dict]) -> str:
-        if not files:
-            return "No key files"
-        lines = []
-        for f in files[:10]:
-            lines.append(f"- {f['path']} ({f.get('functions', 0)} functions)")
-        return "\n".join(lines)
+        return base
 
     def _format_focus_context(self, context: list[dict]) -> str:
         if not context:
-            return "No specific focus area context"
+            return "No specific context"
         lines = []
-        for c in context:
-            lines.append(f"- [{c['type']}] {c['path']}: {c['summary'][:150]}...")
+        for c in context[:5]:
+            lines.append(f"- {c['path']}: {c.get('summary', '')[:100]}")
         return "\n".join(lines)
-
-    def _get_max_modules(self, intent: ParsedIntent) -> int:
-        """Determine max modules based on depth and urgency."""
-        base = settings.max_modules
-
-        # Reduce for overview depth
-        if intent.depth == Depth.OVERVIEW:
-            base = min(base, 4)
-
-        # Reduce for high urgency
-        if intent.urgency.value == "high":
-            base = min(base, 5)
-
-        return base

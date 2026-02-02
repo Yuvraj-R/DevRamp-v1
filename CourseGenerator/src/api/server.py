@@ -5,8 +5,6 @@ import asyncio
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import httpx
 
@@ -379,20 +377,6 @@ async def get_exercise(exercise_id: str):
     if not exercise:
         raise HTTPException(status_code=404, detail=f"Exercise not found: {exercise_id}")
     return exercise.model_dump()
-
-
-# ============================================================================
-# Static files for debug UI
-# ============================================================================
-
-# Serve debug UI
-debug_dir = Path(__file__).parent.parent.parent / "debug"
-if debug_dir.exists():
-    app.mount("/static", StaticFiles(directory=debug_dir), name="static")
-
-    @app.get("/")
-    async def serve_ui():
-        return FileResponse(debug_dir / "index.html")
 
 
 # ============================================================================

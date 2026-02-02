@@ -8,57 +8,29 @@ from src.models.request import CourseRequest
 from src.models.intent import ParsedIntent, Role, Goal, Depth, Urgency
 
 
-INTENT_PARSER_PROMPT = """You are an intent parser for a developer onboarding system.
+INTENT_PARSER_PROMPT = """Parse this developer's learning intent. Be concise.
 
-Given a natural language description of what a developer needs to learn about a codebase,
-extract structured information.
-
-User's intent:
-{intent}
-
+What they said:
+"{intent}"
 {optional_context}
 
-Extract the following (use the exact enum values provided):
+Extract (use exact enum values):
 
-1. role: The developer's role
-   - backend, frontend, fullstack, devops, qa, data, unknown
+role: backend | frontend | fullstack | devops | qa | data | unknown
+goal: onboarding | fix_bug | add_feature | code_review | debugging | refactoring
+focus_areas: specific things they mentioned (2-3 max, empty if general)
+depth: overview | moderate | deep
+urgency: low | medium | high
+key_questions: 2-3 specific questions to answer (not generic fluff)
 
-2. goal: Their primary learning goal
-   - onboarding (general understanding)
-   - fix_bug (need to fix something)
-   - add_feature (need to extend functionality)
-   - code_review (need to review changes)
-   - debugging (need to diagnose issues)
-   - refactoring (need to improve existing code)
-
-3. focus_areas: List of specific areas/modules/features to focus on (empty list if general)
-
-4. depth: Required depth of understanding
-   - overview (high-level only)
-   - moderate (working knowledge)
-   - deep (in-depth for modifications)
-
-5. urgency: Time sensitivity
-   - low (no deadline)
-   - medium (within a week)
-   - high (immediate/within days)
-
-6. key_questions: List of 3-5 specific questions the course should answer
-
-7. context: Any additional context about why they need this (optional)
-
-8. specific_files: Any specific files mentioned (optional, empty list if none)
-
-Respond with ONLY valid JSON matching this schema:
+Return JSON only:
 {{
     "role": "string",
     "goal": "string",
-    "focus_areas": ["string"],
+    "focus_areas": ["max 3 items"],
     "depth": "string",
     "urgency": "string",
-    "key_questions": ["string"],
-    "context": "string or null",
-    "specific_files": ["string"] or null
+    "key_questions": ["2-3 specific questions"]
 }}"""
 
 
@@ -121,14 +93,14 @@ class IntentParser:
         # Parse the JSON response
         result = json.loads(response.choices[0].message.content)
 
-        # Convert to ParsedIntent with proper enums
+        # Convert to ParsedIntent with proper enums, enforce limits
         return ParsedIntent(
             role=Role(result["role"]),
             goal=Goal(result["goal"]),
-            focus_areas=result.get("focus_areas", []),
+            focus_areas=result.get("focus_areas", [])[:3],  # Max 3
             depth=Depth(result["depth"]),
             urgency=Urgency(result["urgency"]),
-            key_questions=result.get("key_questions", []),
+            key_questions=result.get("key_questions", [])[:3],  # Max 3
             context=result.get("context"),
             specific_files=result.get("specific_files"),
         )

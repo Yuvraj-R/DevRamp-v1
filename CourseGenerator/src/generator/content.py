@@ -24,23 +24,44 @@ Their questions: {key_questions}
 {codebase_context}
 
 ## Writing rules - READ THESE
-1. **Be concise.** Every sentence must teach something. No filler.
-2. **Be specific.** Name actual files, functions, classes. No vague hand-waving.
-3. **Be practical.** What do they need to know to do their job?
-4. **Be conversational.** Write like you're explaining to a smart colleague, not writing a textbook.
-5. **Skip the obvious.** Don't explain what a function is. They're developers.
 
-Bad: "The authentication module handles user authentication and provides various authentication-related functionality."
-Good: "Auth lives in `src/auth/`. Login flow: `authenticate()` validates creds → `create_session()` → returns JWT."
+**Content rules:**
+1. Be concise. Every sentence must teach something. No filler.
+2. Be specific. Name actual files, functions, classes. No vague hand-waving.
+3. Be practical. What do they need to know to do their job?
+4. Be conversational. Write like you're explaining to a smart colleague.
+5. Skip the obvious. Don't explain what a function is. They're developers.
 
-Each section should be 100-200 words MAX. If you can say it in fewer words, do it.
+**Formatting rules (IMPORTANT):**
+- Use **bold** for key terms, file names, and important concepts
+- Use bullet points for lists and steps
+- Use `backticks` for code references: file paths, function names, class names
+- Use code blocks with language tags for multi-line code
+- Use → arrows to show flow: `input()` → `process()` → `output()`
+- Break up text with headers using ### for subsections
+- Keep paragraphs SHORT (2-3 sentences max)
+
+**Example of GOOD formatting:**
+```
+### Where to Start
+
+The entry point is **`src/main.py`**:
+
+- `initialize()` → sets up config and DB connections
+- `run_server()` → starts the HTTP listener
+- `shutdown()` → graceful cleanup
+
+**Key insight:** All routes are registered in `routes/index.py` before the server starts.
+```
+
+Each section: 100-200 words MAX. Well-formatted > long-winded.
 
 Return JSON:
 {{
     "sections": [
         {{
             "title": "Punchy title",
-            "content": "The actual content in markdown. Be concise!",
+            "content": "Well-formatted markdown content",
             "code_references": [
                 {{"path": "src/example.py", "node_type": "file", "context": "Why this matters"}}
             ]

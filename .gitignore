@@ -27,6 +27,7 @@ node_modules/
 # Logs
 *.log
 npm-debug.log*
+.logs/
 
 # Build outputs (keep in subdirectories)
 dist/

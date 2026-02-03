@@ -8,7 +8,7 @@ from src.models.request import CourseRequest
 from src.models.intent import ParsedIntent, Role, Goal, Depth, Urgency
 
 
-INTENT_PARSER_PROMPT = """Parse this developer's learning intent. Be concise.
+INTENT_PARSER_PROMPT = """Parse this developer's learning intent.
 
 What they said:
 "{intent}"
@@ -18,19 +18,19 @@ Extract (use exact enum values):
 
 role: backend | frontend | fullstack | devops | qa | data | unknown
 goal: onboarding | fix_bug | add_feature | code_review | debugging | refactoring
-focus_areas: specific things they mentioned (2-3 max, empty if general)
+focus_areas: specific areas/topics they mentioned (up to 5, empty if general)
 depth: overview | moderate | deep
 urgency: low | medium | high
-key_questions: 2-3 specific questions to answer (not generic fluff)
+key_questions: 3-5 specific questions the course should answer
 
 Return JSON only:
 {{
     "role": "string",
     "goal": "string",
-    "focus_areas": ["max 3 items"],
+    "focus_areas": ["up to 5 items"],
     "depth": "string",
     "urgency": "string",
-    "key_questions": ["2-3 specific questions"]
+    "key_questions": ["3-5 specific questions"]
 }}"""
 
 
@@ -93,14 +93,14 @@ class IntentParser:
         # Parse the JSON response
         result = json.loads(response.choices[0].message.content)
 
-        # Convert to ParsedIntent with proper enums, enforce limits
+        # Convert to ParsedIntent with proper enums
         return ParsedIntent(
             role=Role(result["role"]),
             goal=Goal(result["goal"]),
-            focus_areas=result.get("focus_areas", [])[:3],  # Max 3
+            focus_areas=result.get("focus_areas", [])[:5],  # Up to 5
             depth=Depth(result["depth"]),
             urgency=Urgency(result["urgency"]),
-            key_questions=result.get("key_questions", [])[:3],  # Max 3
+            key_questions=result.get("key_questions", [])[:5],  # Up to 5
             context=result.get("context"),
             specific_files=result.get("specific_files"),
         )

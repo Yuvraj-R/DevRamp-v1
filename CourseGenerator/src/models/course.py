@@ -56,6 +56,8 @@ class CourseModule(BaseModel):
     competency_level: CompetencyLevel
     order: int
     sections: list[Section] = Field(default_factory=list)
+    # Planner's suggestion for content generator
+    estimated_sections: int = Field(default=4, description="Suggested number of sections")
 
     @property
     def reading_sections(self) -> list[Section]:

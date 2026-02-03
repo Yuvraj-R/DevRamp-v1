@@ -1,4 +1,4 @@
-"""Content Generator - writes concise, practical learning content."""
+"""Content Generator - writes practical learning content."""
 
 import json
 from openai import OpenAI
@@ -9,7 +9,7 @@ from src.models.intent import ParsedIntent
 from src.client.cortex import CortexClient
 
 
-CONTENT_PROMPT = """Write {num_sections} short learning sections for this module.
+CONTENT_PROMPT = """Write {num_sections} learning sections for this module.
 
 ## Context
 Repo: {repo_name}
@@ -23,47 +23,71 @@ Their questions: {key_questions}
 ## Relevant codebase info
 {codebase_context}
 
-## Writing rules - READ THESE
+## Section Guidelines
+
+**Content depth per section:**
+- Simple concepts: 150-250 words
+- Core concepts: 250-400 words
+- Complex topics: 400-600 words
+
+**You decide the appropriate depth for each section.**
+
+## Writing Rules
 
 **Content rules:**
-1. Be concise. Every sentence must teach something. No filler.
-2. Be specific. Name actual files, functions, classes. No vague hand-waving.
-3. Be practical. What do they need to know to do their job?
-4. Be conversational. Write like you're explaining to a smart colleague.
-5. Skip the obvious. Don't explain what a function is. They're developers.
+1. Be specific. Name actual files, functions, classes from THIS codebase.
+2. Be practical. What do they need to know to do their job?
+3. Be conversational. Write like you're explaining to a smart colleague.
+4. Don't explain basics. They're developers - skip what they already know.
+5. Connect the dots. Show how pieces relate to each other.
 
-**Formatting rules (IMPORTANT):**
+**Formatting rules (IMPORTANT - this renders as markdown):**
 - Use **bold** for key terms, file names, and important concepts
-- Use bullet points for lists and steps
+- Use bullet points (`-`) for lists and steps
 - Use `backticks` for code references: file paths, function names, class names
-- Use code blocks with language tags for multi-line code
+- Use code blocks with language tags for multi-line code:
+  ```python
+  def example():
+      pass
+  ```
 - Use → arrows to show flow: `input()` → `process()` → `output()`
-- Break up text with headers using ### for subsections
-- Keep paragraphs SHORT (2-3 sentences max)
+- Use headers (###) to break up longer sections
+- Keep paragraphs SHORT (2-4 sentences max)
 
-**Example of GOOD formatting:**
+**Good example:**
+```markdown
+### How Requests Flow
+
+When a request hits the API, it goes through several layers:
+
+- **`server.py`** - Entry point, handles routing
+- **`middleware/auth.py`** - Validates JWT tokens
+- **`handlers/`** - Business logic lives here
+
+The key insight: all handlers inherit from `BaseHandler`, which provides:
+
+1. Automatic request validation
+2. Error handling wrapper
+3. Response serialization
+
+```python
+class UserHandler(BaseHandler):
+    def get(self, user_id: str):
+        return self.db.get_user(user_id)
 ```
-### Where to Start
 
-The entry point is **`src/main.py`**:
-
-- `initialize()` → sets up config and DB connections
-- `run_server()` → starts the HTTP listener
-- `shutdown()` → graceful cleanup
-
-**Key insight:** All routes are registered in `routes/index.py` before the server starts.
+This pattern means you rarely write boilerplate.
 ```
-
-Each section: 100-200 words MAX. Well-formatted > long-winded.
 
 Return JSON:
 {{
     "sections": [
         {{
-            "title": "Punchy title",
+            "title": "Section title (specific and actionable)",
             "content": "Well-formatted markdown content",
+            "estimated_minutes": 3-8,
             "code_references": [
-                {{"path": "src/example.py", "node_type": "file", "context": "Why this matters"}}
+                {{"path": "src/actual/file.py", "node_type": "file", "context": "Why this matters"}}
             ]
         }}
     ]
@@ -71,18 +95,18 @@ Return JSON:
 
 
 LEVEL_DESCRIPTIONS = {
-    CompetencyLevel.ARCHITECTURE: "big picture - how pieces connect",
-    CompetencyLevel.EXPLAIN: "what the code does",
-    CompetencyLevel.NAVIGATE: "finding your way around",
-    CompetencyLevel.TRACE: "following execution paths",
-    CompetencyLevel.MODIFY: "making changes safely",
-    CompetencyLevel.EXTEND: "adding new stuff",
-    CompetencyLevel.DEBUG: "finding and fixing issues",
+    CompetencyLevel.ARCHITECTURE: "big picture - how the system is designed and pieces connect",
+    CompetencyLevel.EXPLAIN: "understanding what the code does and why",
+    CompetencyLevel.NAVIGATE: "finding your way around, knowing where things live",
+    CompetencyLevel.TRACE: "following execution paths, understanding data flow",
+    CompetencyLevel.MODIFY: "making changes safely, understanding dependencies",
+    CompetencyLevel.EXTEND: "adding new features, following existing patterns",
+    CompetencyLevel.DEBUG: "finding and fixing issues, understanding failure modes",
 }
 
 
 class ContentGenerator:
-    """Generates concise, practical learning content."""
+    """Generates practical learning content scaled to module needs."""
 
     def __init__(
         self,
@@ -96,21 +120,21 @@ class ContentGenerator:
         self.openai = OpenAI(api_key=settings.openai_api_key)
 
     def generate_content(self, course: Course) -> Course:
-        """Generate content for all modules. Keeps it tight."""
+        """Generate content for all modules."""
         for module in course.modules:
             self._generate_module_content(course, module)
         course.calculate_stats()
         return course
 
     def _generate_module_content(self, course: Course, module: CourseModule) -> None:
-        """Generate 2-3 sections for a module. No more."""
-        # Get context
+        """Generate sections for a module based on its estimated complexity."""
+        # Get context for this module
         codebase_context = self._get_module_context(
             course.repo_name, module, course.parsed_intent
         )
 
-        # 2-3 sections max
-        num_sections = min(settings.max_sections_per_module, 3)
+        # Use the planner's estimate, or default to 4
+        num_sections = module.estimated_sections or 4
 
         prompt = CONTENT_PROMPT.format(
             num_sections=num_sections,
@@ -121,7 +145,7 @@ class ContentGenerator:
             description=module.description,
             role=course.parsed_intent.role.value,
             goal=course.parsed_intent.goal.value,
-            key_questions=", ".join(course.parsed_intent.key_questions[:3]),
+            key_questions=", ".join(course.parsed_intent.key_questions[:5]),
             codebase_context=codebase_context,
         )
 
@@ -134,14 +158,15 @@ class ContentGenerator:
 
         result = json.loads(response.choices[0].message.content)
 
-        for s in result["sections"][:num_sections]:
+        # Add sections from LLM response
+        for s in result["sections"]:
             code_refs = [
                 CodeReference(
                     path=r["path"],
                     node_type=r["node_type"],
                     context=r.get("context", ""),
                 )
-                for r in s.get("code_references", [])[:3]
+                for r in s.get("code_references", [])[:5]  # Allow more references
             ]
 
             section = Section(
@@ -149,30 +174,33 @@ class ContentGenerator:
                 title=s["title"],
                 content=s["content"],
                 code_references=code_refs,
-                estimated_minutes=3,  # Short sections = less time
+                estimated_minutes=s.get("estimated_minutes", 5),
             )
             module.sections.append(section)
 
     def _get_module_context(
         self, repo_name: str, module: CourseModule, intent: ParsedIntent
     ) -> str:
-        """Get relevant context. Keep it brief."""
+        """Get relevant context for the module."""
         query = f"{module.title} - {module.description}"
 
         try:
+            # Try RAG query for rich context
             result = self.cortex.query(
-                question=f"Briefly explain: {query}",
+                question=f"Explain in detail: {query}",
                 repo_name=repo_name,
-                n_context=3,
+                n_context=5,  # More context
             )
-            # Truncate to avoid prompt bloat
-            answer = result.answer[:500] if len(result.answer) > 500 else result.answer
-            return f"{answer}\n\nKey files: {[s['path'] for s in result.sources[:3]]}"
+            # Allow longer context for better content
+            answer = result.answer[:800] if len(result.answer) > 800 else result.answer
+            sources = [s['path'] for s in result.sources[:5]]
+            return f"{answer}\n\nKey files: {sources}"
         except Exception:
             try:
-                search_results = self.cortex.search(query, repo_name, n_results=3)
+                # Fallback to semantic search
+                search_results = self.cortex.search(query, repo_name, n_results=5)
                 return "\n".join(
-                    f"- {r.path}: {r.summary[:100]}" for r in search_results
+                    f"- {r.path}: {r.summary[:150]}" for r in search_results
                 )
             except Exception:
-                return "No specific context available"
+                return "No specific context available - use your knowledge of the codebase structure."

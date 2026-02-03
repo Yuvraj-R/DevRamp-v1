@@ -79,13 +79,14 @@ class ExerciseGenerator:
         return self._exercises.get(exercise_id)
 
     def _generate_module_exercises(self, course: Course, module: CourseModule) -> None:
-        """Generate 1-2 exercises for a module."""
+        """Generate exercises scaled to module size."""
         # Get code context from reading sections
         code_context = self._get_code_context(course.repo_name, module)
         content_summary = self._summarize_content(module)
 
-        # 1-2 exercises per module
-        num_exercises = min(settings.max_exercises_per_module, 2)
+        # Scale exercises to module size: ~1 exercise per 2-3 readings
+        reading_count = len([s for s in module.sections if s.type == SectionType.READING])
+        num_exercises = max(1, min(reading_count // 2, 4))  # 1-4 exercises
 
         prompt = EXERCISE_PROMPT.format(
             num_exercises=num_exercises,
@@ -116,7 +117,7 @@ class ExerciseGenerator:
                 options=e.get("options"),
                 correct_answer=e["correct_answer"],
                 explanation=e["explanation"],
-                hints=e.get("hints", [])[:1],  # One hint max
+                hints=e.get("hints", [])[:2],  # Up to 2 hints
                 difficulty="medium",
             )
 

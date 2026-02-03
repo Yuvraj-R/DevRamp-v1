@@ -10,7 +10,7 @@ from src.models.course import Course, CourseModule, CompetencyLevel
 from src.client.cortex import CortexClient
 
 
-PLANNER_PROMPT = """You're designing a quick onboarding course. Be ruthlessly concise.
+PLANNER_PROMPT = """You're designing an onboarding course for a developer. Your job is to create a course outline that **matches the complexity and size of the codebase**.
 
 ## The Codebase
 {repo_info}
@@ -25,16 +25,27 @@ Key questions they need answered:
 ## Relevant Code Areas
 {focus_context}
 
-## Your Job
-Create a TIGHT course outline. Rules:
+## Module Count Guidelines
 
-1. **{max_modules} modules MAXIMUM** - probably fewer. Small codebase = fewer modules.
-2. **Start with Architecture** (level 0) unless they just want a quick overview
-3. **No fluff** - every module must teach something essential
-4. **Be practical** - what do they actually need to know to do their job?
+**Base your module count on codebase complexity, not arbitrary limits:**
 
-Competency levels (pick what fits their goal):
-- 0: Architecture (system design, how pieces connect)
+| Codebase Size | Suggested Modules | Reasoning |
+|---------------|-------------------|-----------|
+| Tiny (<20 files) | 2-3 modules | Quick overview is enough |
+| Small (20-50 files) | 3-5 modules | Cover main concepts |
+| Medium (50-200 files) | 5-8 modules | Multiple subsystems to learn |
+| Large (200-500 files) | 8-12 modules | Many components and patterns |
+| Very Large (500+ files) | 10-15 modules | Complex system requires thorough coverage |
+
+**However, complexity matters more than file count:**
+- A 30-file codebase with complex algorithms may need 6+ modules
+- A 500-file codebase with repetitive CRUD may need only 8 modules
+- Framework codebases (React, Django, etc.) need MORE modules due to conceptual depth
+
+## Competency Levels
+
+Pick levels that match their goal:
+- 0: Architecture (system design, how pieces connect) - **Always include this first**
 - 1: Explain (what does this code do?)
 - 2: Navigate (where do I find X?)
 - 3: Trace (follow the execution path)
@@ -43,29 +54,40 @@ Competency levels (pick what fits their goal):
 - 6: Debug (finding and fixing issues)
 
 Goal → Level mapping:
-- onboarding: 0, 1, 2 (understand the lay of the land)
+- onboarding: 0, 1, 2, 3 (understand the lay of the land, trace key flows)
 - fix_bug/debugging: 0, 3, 6 (find it, trace it, fix it)
 - add_feature: 0, 2, 4, 5 (find where, modify, extend)
 - code_review: 0, 1, 3 (understand structure and flow)
 - refactoring: 0, 3, 4 (trace dependencies, modify safely)
 
-Return JSON only:
+## Your Task
+
+Design a course outline with the **appropriate number of modules** for this codebase.
+
+**Rules:**
+1. **Architecture module is always first** (level 0) - gives the big picture
+2. **Cover all major subsystems** - don't leave gaps
+3. **Be specific** - "Authentication Flow" not "Security Stuff"
+4. **Include practical modules** - they need to actually DO things, not just read
+
+Return JSON:
 {{
-    "title": "Short, punchy title",
-    "description": "One sentence max",
+    "title": "Descriptive course title",
+    "description": "One sentence describing what they'll learn",
     "modules": [
         {{
-            "title": "Module title (be specific)",
-            "description": "What they'll learn (one line)",
+            "title": "Module title (be specific to this codebase)",
+            "description": "What they'll learn and why it matters",
             "competency_level": 0-6,
-            "key_files": ["the 2-3 most important files"]
+            "key_files": ["2-4 most important files for this module"],
+            "estimated_sections": 3-7
         }}
     ]
 }}"""
 
 
 class CoursePlanner:
-    """Plans course structure. Keeps it tight and practical."""
+    """Plans course structure based on codebase complexity."""
 
     def __init__(
         self,
@@ -75,7 +97,8 @@ class CoursePlanner:
     ):
         self.cortex = cortex_client
         self.model = model or settings.llm_model
-        self.reasoning_level = reasoning_level or settings.reasoning_level
+        # Use higher reasoning for planning decisions
+        self.reasoning_level = reasoning_level or settings.planning_reasoning_level
         self.openai = OpenAI(api_key=settings.openai_api_key)
 
     def plan(
@@ -83,30 +106,29 @@ class CoursePlanner:
         request: CourseRequest,
         parsed_intent: ParsedIntent,
     ) -> Course:
-        """Create a lean course outline."""
+        """Create a course outline scaled to codebase complexity."""
         # Get repo info
         arch = self.cortex.get_architecture_overview(request.repo_name)
 
         # Get focus area context
         focus_context = []
-        for area in parsed_intent.focus_areas[:3]:  # Limit to top 3
+        for area in parsed_intent.focus_areas[:5]:  # Allow more focus areas
             context = self.cortex.get_focus_area_context(
-                request.repo_name, area, n_results=2
+                request.repo_name, area, n_results=3
             )
             focus_context.extend(context)
 
-        # Determine max modules based on codebase size
         file_count = arch.get('file_count', 50)
-        max_modules = self._get_max_modules(file_count, parsed_intent)
+        size_category = self._categorize_size(file_count)
 
-        # Build prompt
+        # Build rich repo info for the LLM
         repo_info = f"""
 Name: {request.repo_name}
 Language: {arch.get('language', 'unknown')}
-Size: {file_count} files ({"small" if file_count < 30 else "medium" if file_count < 100 else "large"})
-Summary: {(arch.get('repo_summary') or 'No summary')[:300]}
+Size: {file_count} files ({size_category})
+Summary: {(arch.get('repo_summary') or 'No summary available')[:500]}
 
-Key modules: {', '.join(m.get('name', '') for m in arch.get('modules', [])[:5])}
+Modules/directories: {', '.join(m.get('name', '') for m in arch.get('modules', [])[:10])}
 """
 
         prompt = PLANNER_PROMPT.format(
@@ -115,12 +137,11 @@ Key modules: {', '.join(m.get('name', '') for m in arch.get('modules', [])[:5])}
             goal=parsed_intent.goal.value,
             depth=parsed_intent.depth.value,
             focus_areas=", ".join(parsed_intent.focus_areas) or "General overview",
-            key_questions="\n".join(f"- {q}" for q in parsed_intent.key_questions[:4]),
+            key_questions="\n".join(f"- {q}" for q in parsed_intent.key_questions[:5]),
             focus_context=self._format_focus_context(focus_context),
-            max_modules=max_modules,
         )
 
-        # Get plan from LLM
+        # Get plan from LLM with medium reasoning
         response = self.openai.chat.completions.create(
             model=self.model,
             reasoning_effort=self.reasoning_level,
@@ -130,15 +151,17 @@ Key modules: {', '.join(m.get('name', '') for m in arch.get('modules', [])[:5])}
 
         result = json.loads(response.choices[0].message.content)
 
-        # Build Course object
+        # Build Course object - no hard cap, use what LLM suggests
         modules = []
-        for i, m in enumerate(result["modules"][:max_modules]):
+        for i, m in enumerate(result["modules"]):
             module = CourseModule(
                 title=m["title"],
                 description=m["description"],
                 competency_level=CompetencyLevel(m["competency_level"]),
                 order=i,
                 sections=[],
+                # Store estimated sections for content generator
+                estimated_sections=m.get("estimated_sections", 4),
             )
             modules.append(module)
 
@@ -151,27 +174,23 @@ Key modules: {', '.join(m.get('name', '') for m in arch.get('modules', [])[:5])}
             modules=modules,
         )
 
-    def _get_max_modules(self, file_count: int, intent: ParsedIntent) -> int:
-        """Fewer files = fewer modules. Simple."""
+    def _categorize_size(self, file_count: int) -> str:
+        """Categorize codebase size for the prompt."""
         if file_count < 20:
-            base = 2
+            return "tiny"
         elif file_count < 50:
-            base = 3
-        elif file_count < 100:
-            base = 4
+            return "small"
+        elif file_count < 200:
+            return "medium"
+        elif file_count < 500:
+            return "large"
         else:
-            base = settings.max_modules
-
-        # Quick overview = even fewer
-        if intent.depth.value == "overview":
-            base = min(base, 2)
-
-        return base
+            return "very large"
 
     def _format_focus_context(self, context: list[dict]) -> str:
         if not context:
-            return "No specific context"
+            return "No specific context available"
         lines = []
-        for c in context[:5]:
-            lines.append(f"- {c['path']}: {c.get('summary', '')[:100]}")
+        for c in context[:8]:  # More context
+            lines.append(f"- {c['path']}: {c.get('summary', '')[:150]}")
         return "\n".join(lines)

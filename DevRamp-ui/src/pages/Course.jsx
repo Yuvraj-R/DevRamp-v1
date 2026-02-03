@@ -4,9 +4,8 @@ import { ChevronDown, ChevronRight, Clock, Layers, BookOpen, CheckCircle, Loader
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import Header from '../components/layout/Header'
 import ExerciseCard from '../components/exercise/ExerciseCard'
-import { api } from '../api/client'
+import { api, markCourseRead } from '../api/client'
 
 export default function Course() {
   const { courseId } = useParams()
@@ -18,6 +17,9 @@ export default function Course() {
   const [completedSections, setCompletedSections] = useState(new Set())
 
   useEffect(() => {
+    // Mark course as read when viewing
+    markCourseRead(courseId)
+
     api.getCourse(courseId)
       .then(data => {
         setCourse(data)
@@ -80,7 +82,7 @@ export default function Course() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-[#FF6B35] animate-spin" />
       </div>
     )
@@ -88,44 +90,40 @@ export default function Course() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Header showBack />
-        <div className="max-w-xl mx-auto px-6 py-16 text-center">
-          <p className="text-red-600">{error}</p>
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-2">{error}</p>
+          <p className="text-gray-500 text-sm">Could not load course</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <Header showBack />
-
+    <div className="h-full flex flex-col">
       {/* Course Header */}
-      <div className="border-b border-gray-100 bg-gray-50">
-        <div className="max-w-6xl mx-auto px-6 py-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">{course.title}</h1>
-          <div className="flex items-center gap-6 text-sm text-gray-500">
-            <span className="flex items-center gap-1.5">
-              <Layers className="w-4 h-4" />
-              {course.modules?.length || 0} modules
-            </span>
-            <span className="flex items-center gap-1.5">
-              <BookOpen className="w-4 h-4" />
-              {course.total_readings || 0} readings
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Clock className="w-4 h-4" />
-              {course.estimated_hours?.toFixed(1) || 0} hrs
-            </span>
-          </div>
+      <div className="border-b border-gray-100 bg-gray-50 px-6 py-4 flex-shrink-0">
+        <h1 className="text-xl font-bold text-gray-900 mb-1">{course.title}</h1>
+        <div className="flex items-center gap-6 text-sm text-gray-500">
+          <span className="flex items-center gap-1.5">
+            <Layers className="w-4 h-4" />
+            {course.modules?.length || 0} modules
+          </span>
+          <span className="flex items-center gap-1.5">
+            <BookOpen className="w-4 h-4" />
+            {course.total_readings || 0} readings
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Clock className="w-4 h-4" />
+            {course.estimated_hours?.toFixed(1) || 0} hrs
+          </span>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-6xl mx-auto flex">
-        {/* Sidebar */}
-        <aside className="w-72 flex-shrink-0 border-r border-gray-100 h-[calc(100vh-140px)] overflow-y-auto sticky top-0">
+      <div className="flex-1 flex overflow-hidden">
+        {/* Module Sidebar */}
+        <aside className="w-72 flex-shrink-0 border-r border-gray-100 overflow-y-auto bg-white">
           <nav className="p-4">
             {course.modules?.map((mod, modIndex) => (
               <div key={mod.id} className="mb-2">
@@ -175,7 +173,7 @@ export default function Course() {
         </aside>
 
         {/* Content Pane */}
-        <main className="flex-1 min-w-0 h-[calc(100vh-140px)] overflow-y-auto">
+        <main className="flex-1 min-w-0 overflow-y-auto">
           {currentSection ? (
             <div className="max-w-3xl mx-auto px-8 py-8">
               {/* Section Header */}

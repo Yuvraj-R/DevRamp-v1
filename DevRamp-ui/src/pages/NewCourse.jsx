@@ -1,22 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, Clock, Layers, Loader2 } from 'lucide-react'
-import Header from '../components/layout/Header'
+import { ArrowRight, Loader2 } from 'lucide-react'
 import { api } from '../api/client'
 
-export default function Home() {
+export default function NewCourse() {
   const [githubUrl, setGithubUrl] = useState('')
   const [intent, setIntent] = useState('')
   const [loading, setLoading] = useState(false)
-  const [courses, setCourses] = useState([])
   const [error, setError] = useState('')
   const navigate = useNavigate()
-
-  useEffect(() => {
-    api.getCourses()
-      .then(data => setCourses(data.courses || []))
-      .catch(() => {})
-  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -45,21 +37,17 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
-
-      {/* Hero */}
-      <main className="max-w-2xl mx-auto px-6 py-16">
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold text-gray-900 mb-3">
-            Learn any codebase, fast.
+    <div className="h-full flex items-center justify-center p-8">
+      <div className="w-full max-w-xl">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Create a new course
           </h1>
-          <p className="text-lg text-gray-500">
+          <p className="text-gray-500">
             Enter a GitHub repo and tell us what you need to learn.
           </p>
         </div>
 
-        {/* Input Form */}
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
           <div className="mb-5">
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -113,39 +101,7 @@ export default function Home() {
             )}
           </button>
         </form>
-
-        {/* Recent Courses */}
-        {courses.length > 0 && (
-          <div className="mt-12">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Courses</h2>
-            <div className="grid gap-4">
-              {courses.slice(0, 5).map(course => (
-                <button
-                  key={course.id}
-                  onClick={() => navigate(`/course/${course.id}`)}
-                  className="card text-left hover:border-[#FF6B35] group"
-                >
-                  <h3 className="font-medium text-gray-900 group-hover:text-[#FF6B35] transition-colors">
-                    {course.title || course.repo_name}
-                  </h3>
-                  <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <Layers className="w-4 h-4" />
-                      {course.repo_name}
-                    </span>
-                    {course.created_at && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {new Date(course.created_at).toLocaleDateString()}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </main>
+      </div>
     </div>
   )
 }

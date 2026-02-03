@@ -57,10 +57,19 @@ The brain of DevRamp. Ingests repositories and builds a queryable knowledge base
 Generates personalized learning courses from the knowledge base.
 
 - Parses natural language learning intent (role, goals, focus areas)
-- Plans course structure based on competency levels
-- Generates concise, practical content with code references
+- **Adaptive course planning** - scales module count to codebase complexity
+- Generates practical content with real code references
 - Creates exercises matched to skill level
 - Stores courses in SQLite for retrieval
+
+**Adaptive Scaling:**
+| Codebase Size | Modules | Sections/Module |
+|---------------|---------|-----------------|
+| Tiny (<20 files) | 2-3 | 3-4 |
+| Small (20-50 files) | 3-5 | 3-5 |
+| Medium (50-200 files) | 5-8 | 4-6 |
+| Large (200-500 files) | 8-12 | 4-6 |
+| Very Large (500+ files) | 10-15 | 5-7 |
 
 **Competency Levels:**
 | Level | Name | Focus |
@@ -73,7 +82,7 @@ Generates personalized learning courses from the knowledge base.
 | 5 | Extend | Adding new features |
 | 6 | Debug | Diagnosing and fixing issues |
 
-**Stack:** FastAPI, OpenAI (GPT-5.2), SQLite
+**Stack:** FastAPI, OpenAI (GPT-5.2 with medium reasoning for planning), SQLite
 
 ## Quick Start
 

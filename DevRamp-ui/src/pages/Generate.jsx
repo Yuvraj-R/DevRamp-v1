@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Check, Loader2, X } from 'lucide-react'
-import Header from '../components/layout/Header'
-import { api } from '../api/client'
+import { Check, Loader2, X, RefreshCw, Clock, Info } from 'lucide-react'
+import { api, removeActiveJob } from '../api/client'
 
 export default function Generate() {
   const { jobId } = useParams()
   const navigate = useNavigate()
   const [job, setJob] = useState(null)
   const [error, setError] = useState('')
+  const [lastUpdate, setLastUpdate] = useState(Date.now())
+  const maxConsecutiveErrors = 5
+  const consecutiveErrors = useRef(0)
 
   useEffect(() => {
     if (!jobId) return
@@ -17,43 +19,86 @@ export default function Generate() {
       try {
         const data = await api.getJob(jobId)
         setJob(data)
+        setLastUpdate(Date.now())
+        consecutiveErrors.current = 0 // Reset on success
+        setError('') // Clear any temporary errors
 
         if (data.status === 'completed' && data.course_id) {
+          removeActiveJob(jobId)
           // Small delay for UX, then redirect
-          setTimeout(() => navigate(`/course/${data.course_id}`), 1000)
+          setTimeout(() => navigate(`/course/${data.course_id}`), 1500)
         } else if (data.status === 'failed') {
+          removeActiveJob(jobId)
           setError(data.error || 'Generation failed')
         }
       } catch (err) {
-        setError(err.message)
+        consecutiveErrors.current++
+
+        // Only show error after multiple consecutive failures
+        if (consecutiveErrors.current >= maxConsecutiveErrors) {
+          setError(`Connection issue: ${err.message}. Still trying...`)
+        }
+
+        // Don't stop polling - backend might still be working
+        console.log(`Poll error (attempt ${consecutiveErrors.current}):`, err.message)
       }
     }
 
     poll()
-    const interval = setInterval(poll, 1500)
+    const interval = setInterval(poll, 3000) // Poll every 3s
     return () => clearInterval(interval)
   }, [jobId, navigate])
+
+  // Calculate time elapsed
+  const startTime = job?.created_at ? new Date(job.created_at).getTime() : lastUpdate
+  const timeElapsed = Math.floor((Date.now() - startTime) / 1000)
+  const minutes = Math.floor(timeElapsed / 60)
+  const seconds = timeElapsed % 60
 
   const progressPercent = job
     ? Math.round((job.step_index / (job.total_steps - 1)) * 100)
     : 0
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <Header showBack />
+  const isStillWorking = job && job.status !== 'completed' && job.status !== 'failed'
+  const isCompleted = job?.status === 'completed'
 
-      <main className="max-w-xl mx-auto px-6 py-16">
-        <div className="text-center mb-10">
+  return (
+    <div className="h-full flex items-center justify-center p-8">
+      <div className="w-full max-w-xl">
+        {/* Header */}
+        <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            {job?.status === 'completed' ? 'Course Ready!' : 'Generating your course...'}
+            {isCompleted ? 'Course Ready!' : 'Generating your course...'}
           </h1>
           {job?.repo_name && (
             <p className="text-gray-500">{job.repo_name}</p>
           )}
         </div>
 
+        {/* Info Banner */}
+        {isStillWorking && (
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6 flex gap-3">
+            <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-blue-800">
+              <p className="font-medium">Course generation takes 5-20 minutes</p>
+              <p className="text-blue-600 mt-1">
+                This depends on codebase size and complexity. You can navigate away -
+                your course will appear in the sidebar when it's ready.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Progress Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+          {/* Time Elapsed */}
+          {isStillWorking && (
+            <div className="text-center text-sm text-gray-500 mb-6 flex items-center justify-center gap-2">
+              <Clock className="w-4 h-4" />
+              Time elapsed: {minutes > 0 ? `${minutes}m ` : ''}{seconds}s
+            </div>
+          )}
+
           {/* Steps */}
           <div className="space-y-4 mb-8">
             {job?.steps?.map((step, i) => (
@@ -94,8 +139,21 @@ export default function Generate() {
             {progressPercent}% complete
           </p>
 
-          {/* Error */}
-          {error && (
+          {/* Connection Warning (soft error) */}
+          {error && isStillWorking && (
+            <div className="mt-6 p-4 bg-amber-50 border border-amber-100 rounded-lg flex items-start gap-3">
+              <RefreshCw className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5 animate-spin" />
+              <div>
+                <p className="font-medium text-amber-800">Connection unstable</p>
+                <p className="text-sm text-amber-600 mt-1">
+                  {error} - The backend is likely still working.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Hard Error (job failed) */}
+          {error && !isStillWorking && job?.status === 'failed' && (
             <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-lg flex items-start gap-3">
               <X className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
               <div>
@@ -104,8 +162,20 @@ export default function Generate() {
               </div>
             </div>
           )}
+
+          {/* Completion Message */}
+          {isCompleted && (
+            <div className="mt-6 p-4 bg-green-50 border border-green-100 rounded-lg text-center">
+              <p className="text-green-800 font-medium">Redirecting to your course...</p>
+            </div>
+          )}
         </div>
-      </main>
+
+        {/* Job ID for reference */}
+        <p className="text-center text-xs text-gray-400 mt-4">
+          Job ID: {jobId}
+        </p>
+      </div>
     </div>
   )
 }

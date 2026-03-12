@@ -1,12 +1,12 @@
 services:
   neo4j:
     image: neo4j:5.15.0
-    container_name: changeme_neo4j
+    container_name: knowledge_cortex_neo4j
     ports:
       - "7474:7474"  # HTTP (Browser)
       - "7687:7687"  # Bolt
     environment:
-      - NEO4J_AUTH=neo4j/changeme
+      - NEO4J_AUTH=${NEO4J_AUTH:-neo4j/changeme}
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_apoc_export_file_enabled=true
       - NEO4J_apoc_import_file_enabled=true

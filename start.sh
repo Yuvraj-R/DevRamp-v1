@@ -107,11 +107,12 @@ start_neo4j() {
     # Wait for Neo4j to be ready
     local max_attempts=30
     local attempt=0
-    while ! docker exec knowledgecortex-neo4j-1 cypher-shell -u neo4j -p changeme "RETURN 1" >/dev/null 2>&1; do
+    local neo4j_pass="${NEO4J_PASSWORD:-changeme}"
+    while ! docker exec knowledgecortex-neo4j-1 cypher-shell -u neo4j -p "$neo4j_pass" "RETURN 1" >/dev/null 2>&1; do
         attempt=$((attempt + 1))
         if [ $attempt -ge $max_attempts ]; then
             # Try alternate container name
-            if docker exec knowledgecortex-neo4j cypher-shell -u neo4j -p changeme "RETURN 1" >/dev/null 2>&1; then
+            if docker exec knowledgecortex-neo4j cypher-shell -u neo4j -p "$neo4j_pass" "RETURN 1" >/dev/null 2>&1; then
                 break
             fi
             warn "Neo4j taking longer than expected to start (may still be initializing)"
@@ -124,7 +125,7 @@ start_neo4j() {
 }
 
 # Setup and start KnowledgeCortex
-start_changeme() {
+start_knowledge_cortex() {
     log "Starting KnowledgeCortex..."
     cd "$ROOT_DIR/KnowledgeCortex"
 
@@ -162,7 +163,7 @@ start_changeme() {
         cat > .env << 'EOF'
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
-NEO4J_PASSWORD=changeme
+NEO4J_PASSWORD=${NEO4J_PASSWORD:-changeme}
 OPENAI_API_KEY=your-key-here
 EOF
         error "Please add your OPENAI_API_KEY to KnowledgeCortex/.env"
@@ -344,7 +345,7 @@ main() {
             sleep 2
             check_prerequisites
             start_neo4j
-            start_changeme
+            start_knowledge_cortex
             start_course_generator
             start_frontend
             show_status
@@ -373,7 +374,7 @@ main() {
             echo ""
             check_prerequisites
             start_neo4j
-            start_changeme
+            start_knowledge_cortex
             start_course_generator
             start_frontend
             show_status

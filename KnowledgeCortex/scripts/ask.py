@@ -7,7 +7,7 @@ sys.path.insert(0, '.')
 from src.graph.neo4j_client import get_client
 from src.query.engine import QueryEngine
 
-
+#knowledge cortext 
 def main():
     client = get_client()
     engine = QueryEngine(client)

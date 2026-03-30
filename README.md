@@ -269,6 +269,6 @@ npm install
 ./start.sh logs cortex   # Just KnowledgeCortex
 ```
 
-## License
+## License 
 
 MIT
